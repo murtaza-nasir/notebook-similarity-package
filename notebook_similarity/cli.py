@@ -11,24 +11,30 @@ from .analyzer import analyze_directory, quick_check
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Detect similar or identical submissions in Jupyter notebooks",
+        description="Detect similar or identical submissions in code files (Jupyter notebooks and Python files)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Analyze all notebooks in current directory
+  # Analyze all notebooks and Python files in current directory
   notebook-similarity .
   
+  # Analyze only Python files
+  notebook-similarity /path/to/files --types .py
+  
+  # Analyze both notebooks and Python files
+  notebook-similarity /path/to/files --types .ipynb .py
+  
   # Analyze with custom threshold
-  notebook-similarity /path/to/notebooks --threshold 0.8
+  notebook-similarity /path/to/files --threshold 0.8
   
-  # Compare two specific notebooks
-  notebook-similarity --compare notebook1.ipynb notebook2.ipynb
+  # Compare two specific files
+  notebook-similarity --compare file1.py file2.ipynb
   
-  # Analyze without text files (just use notebook filenames)
-  notebook-similarity /path/to/notebooks --no-txt
+  # Analyze without text files (just use filenames)
+  notebook-similarity /path/to/files --no-txt
   
   # Use fewer workers for parallel processing
-  notebook-similarity /path/to/notebooks --workers 4
+  notebook-similarity /path/to/files --workers 4
         """
     )
     
@@ -37,14 +43,14 @@ Examples:
         "path",
         nargs="?",
         default=".",
-        help="Path to directory containing notebooks (default: current directory)"
+        help="Path to directory containing code files (default: current directory)"
     )
     
     parser.add_argument(
         "--compare",
         nargs=2,
-        metavar=("NOTEBOOK1", "NOTEBOOK2"),
-        help="Compare two specific notebooks"
+        metavar=("FILE1", "FILE2"),
+        help="Compare two specific code files (.ipynb or .py)"
     )
     
     parser.add_argument(
@@ -73,6 +79,13 @@ Examples:
     )
     
     parser.add_argument(
+        "--types",
+        nargs="+",
+        default=None,
+        help="File types to analyze (e.g., .ipynb .py, default: both)"
+    )
+    
+    parser.add_argument(
         "--quiet",
         "-q",
         action="store_true",
@@ -83,19 +96,30 @@ Examples:
     
     try:
         if args.compare:
-            # Compare two specific notebooks
-            notebook1, notebook2 = args.compare
+            # Compare two specific files
+            file1, file2 = args.compare
             
             # Check files exist
-            if not Path(notebook1).exists():
-                print(f"Error: File not found: {notebook1}")
+            if not Path(file1).exists():
+                print(f"Error: File not found: {file1}")
                 sys.exit(1)
-            if not Path(notebook2).exists():
-                print(f"Error: File not found: {notebook2}")
+            if not Path(file2).exists():
+                print(f"Error: File not found: {file2}")
+                sys.exit(1)
+            
+            # Check file types
+            valid_extensions = ['.ipynb', '.py']
+            if Path(file1).suffix not in valid_extensions:
+                print(f"Error: Unsupported file type: {file1}")
+                print(f"Supported types: {', '.join(valid_extensions)}")
+                sys.exit(1)
+            if Path(file2).suffix not in valid_extensions:
+                print(f"Error: Unsupported file type: {file2}")
+                print(f"Supported types: {', '.join(valid_extensions)}")
                 sys.exit(1)
             
             # Run comparison
-            quick_check(notebook1, notebook2)
+            quick_check(file1, file2)
         else:
             # Analyze directory
             path = Path(args.path)
@@ -108,6 +132,19 @@ Examples:
                 print(f"Error: Path is not a directory: {path}")
                 sys.exit(1)
             
+            # Process file types argument
+            file_types = args.types
+            if file_types:
+                # Ensure all types start with a dot
+                file_types = [t if t.startswith('.') else f'.{t}' for t in file_types]
+                # Validate file types
+                valid_types = ['.ipynb', '.py']
+                for ft in file_types:
+                    if ft not in valid_types:
+                        print(f"Error: Unsupported file type: {ft}")
+                        print(f"Supported types: {', '.join(valid_types)}")
+                        sys.exit(1)
+            
             # Run analysis
             detector, df, clusters = analyze_directory(
                 directory_path=str(path),
@@ -115,6 +152,7 @@ Examples:
                 similarity_threshold=args.threshold,
                 num_workers=args.workers,
                 include_txt_files=not args.no_txt,
+                file_types=file_types,
                 verbose=not args.quiet
             )
             

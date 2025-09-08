@@ -1,12 +1,12 @@
-# Notebook Similarity Detector
+# Notebook & Python File Similarity Detector
 
-A powerful Python tool for detecting similar or identical submissions in Jupyter notebooks. Perfect for educators and TAs who need to check for potential plagiarism in programming assignments.
+A powerful Python tool for detecting similar or identical submissions in Jupyter notebooks and Python files. Perfect for educators and TAs who need to check for potential plagiarism in programming assignments.
 
 ## Example Report
 
 <img src="example_report.png" alt="Example Similarity Report" width="600">
 
-*Sample output showing similarity detection between multiple notebook submissions*
+*Sample output showing similarity detection between multiple code submissions*
 
 ## Blackboard LMS Integration
 
@@ -24,20 +24,35 @@ This tool is specifically designed to work with assignments downloaded from Blac
    # Navigate to the extracted folder
    cd /path/to/extracted/submissions
    
-   # Run the detector (it will automatically find all .ipynb files and read student info from .txt files)
+   # Run the detector (it will automatically find all .ipynb and .py files and read student info from .txt files)
    python /path/to/notebook_similarity_package/run_similarity_check.py .
    
    # Or if installed as a package
    notebook-similarity .
+   
+   # To analyze only Python files
+   notebook-similarity . --types .py
+   
+   # To analyze both notebooks and Python files explicitly
+   notebook-similarity . --types .ipynb .py
    ```
 
 3. **What the tool expects**:
-   - Each student submission should include a single `.ipynb` (Jupyter notebook) file
+   - Each student submission should include either:
+     - A `.ipynb` (Jupyter notebook) file, or
+     - A `.py` (Python) file
    - Blackboard automatically creates accompanying `.txt` files with student information (name, ID, submission time)
    - The tool will parse these `.txt` files to identify students
-   - File naming pattern from Blackboard: `AssignmentName_studentid_attempt_date_time_notebook.ipynb`
+   - File naming patterns from Blackboard: 
+     - Notebooks: `AssignmentName_studentid_attempt_date_time_notebook.ipynb`
+     - Python files: `AssignmentName_studentid_attempt_date_time_script.py`
 
 ## Features
+
+- **Support for Multiple File Types**:
+  - Jupyter notebooks (`.ipynb`)
+  - Python files (`.py`)
+  - Can analyze both types in the same directory
 
 - **Multiple Detection Methods**:
   - Exact code matching using MD5 hashes
@@ -86,7 +101,7 @@ python /path/to/notebook_similarity_package/run_similarity_check.py /path/to/bla
 notebook-similarity /path/to/blackboard/submissions
 
 # The tool will:
-# - Automatically find all .ipynb files
+# - Automatically find all .ipynb and .py files
 # - Parse student names and IDs from Blackboard's .txt files
 # - Generate similarity reports in the same directory
 ```
@@ -96,29 +111,38 @@ notebook-similarity /path/to/blackboard/submissions
 After installation, use the `notebook-similarity` command:
 
 ```bash
-# Analyze all notebooks in current directory
+# Analyze all notebooks and Python files in current directory
 notebook-similarity .
 
 # Analyze specific directory
-notebook-similarity /path/to/notebooks
+notebook-similarity /path/to/submissions
+
+# Analyze only Python files
+notebook-similarity /path/to/submissions --types .py
+
+# Analyze only notebooks
+notebook-similarity /path/to/submissions --types .ipynb
+
+# Analyze both explicitly
+notebook-similarity /path/to/submissions --types .ipynb .py
 
 # Set custom similarity threshold (default: 0.7)
-notebook-similarity /path/to/notebooks --threshold 0.8
+notebook-similarity /path/to/submissions --threshold 0.8
 
-# Compare two specific notebooks
-notebook-similarity --compare notebook1.ipynb notebook2.ipynb
+# Compare two specific files (can be .ipynb or .py)
+notebook-similarity --compare file1.py file2.ipynb
 
 # Specify output directory for reports
-notebook-similarity /path/to/notebooks --output /path/to/output
+notebook-similarity /path/to/submissions --output /path/to/output
 
 # Use fewer workers for parallel processing
-notebook-similarity /path/to/notebooks --workers 4
+notebook-similarity /path/to/submissions --workers 4
 
 # Analyze without looking for .txt metadata files
-notebook-similarity /path/to/notebooks --no-txt
+notebook-similarity /path/to/submissions --no-txt
 
 # Quiet mode (suppress progress messages)
-notebook-similarity /path/to/notebooks --quiet
+notebook-similarity /path/to/submissions --quiet
 ```
 
 ### Python API
@@ -126,18 +150,26 @@ notebook-similarity /path/to/notebooks --quiet
 ```python
 from notebook_similarity import analyze_directory, NotebookSimilarityDetector
 
-# Quick analysis of a directory
+# Quick analysis of a directory (analyzes both .ipynb and .py by default)
 detector, results_df, clusters = analyze_directory(
-    directory_path="/path/to/notebooks",
+    directory_path="/path/to/submissions",
     similarity_threshold=0.7,
     output_dir="/path/to/output"
 )
 
+# Analyze only Python files
+detector, results_df, clusters = analyze_directory(
+    directory_path="/path/to/submissions",
+    file_types=['.py'],
+    similarity_threshold=0.7
+)
+
 # Custom analysis with more control
 detector = NotebookSimilarityDetector(
-    folder_path="/path/to/notebooks",
+    folder_path="/path/to/submissions",
     num_workers=4,
-    include_txt_files=True
+    include_txt_files=True,
+    file_types=['.ipynb', '.py']  # Specify which file types to analyze
 )
 
 detector.load_submissions()
@@ -145,9 +177,9 @@ detector.analyze_similarities(similarity_threshold=0.8)
 clusters = detector.find_clusters()
 df = detector.generate_report("custom_report.html")
 
-# Compare two specific notebooks
+# Compare two specific files (can be .ipynb or .py)
 from notebook_similarity.analyzer import quick_check
-result = quick_check("notebook1.ipynb", "notebook2.ipynb")
+result = quick_check("file1.py", "file2.ipynb")
 ```
 
 ### Direct Script Usage (Without Installation)
@@ -166,19 +198,20 @@ detector, df, clusters = analyze_directory("/path/to/notebooks")
 
 ## Output
 
-The tool generates reports in the same directory as the analyzed notebooks:
+The tool generates reports in the same directory as the analyzed files:
 
 1. **HTML Report** (`similarity_report.html`): 
    - Summary statistics
-   - Flagged submissions table
+   - Flagged submissions table with file type indicators
    - Color-coded by similarity level:
      - Red: Exact matches (100% identical)
      - Orange: High similarity (≥80%)
      - Yellow: Medium similarity (60-80%)
+   - Shows student names, IDs, and submission times (when available)
 
 2. **CSV File** (`similarity_report.csv`):
    - Detailed data for all comparisons
-   - Can be imported into Excel or other tools
+   - Can be imported into Excel or other tools for further analysis
 
 ## Similarity Metrics
 
@@ -231,19 +264,24 @@ MIT License
 
 ## Example Workflow for Educators
 
-1. **Assign a Jupyter notebook-based assignment in Blackboard**
+1. **Assign a programming assignment in Blackboard** (accepts .ipynb or .py files)
 2. **After the deadline, download all submissions**:
    - Blackboard → Grade Center → Download Assignment Files
 3. **Extract the downloaded zip file** to a folder
 4. **Run the similarity detector**:
    ```bash
+   # For mixed submissions (notebooks and Python files)
    python notebook_similarity_package/run_similarity_check.py extracted_submissions/
+   
+   # For Python-only assignments
+   notebook-similarity extracted_submissions/ --types .py
    ```
 5. **Review the HTML report** (`similarity_report.html`):
    - Red highlights = Exact copies (100% match)
    - Orange = High similarity (≥80%)
    - Check clusters for groups of students with similar code
-6. **Investigate flagged submissions** by comparing the original notebooks
+   - File type column shows whether submission was .ipynb or .py
+6. **Investigate flagged submissions** by comparing the original files
 
 ## Interpreting Results
 

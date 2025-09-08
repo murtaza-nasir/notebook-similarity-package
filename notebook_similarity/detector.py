@@ -26,7 +26,7 @@ class StudentSubmission:
     """Represents a student submission."""
     student_id: str
     student_name: str
-    notebook_path: str
+    file_path: str  # Changed from notebook_path to be more generic
     submission_time: str
     code_cells: List[str]
     markdown_cells: List[str]
@@ -36,8 +36,9 @@ class StudentSubmission:
     variable_names: Set[str]
     function_names: Set[str]
     import_statements: Set[str]
+    file_type: str  # Added to track if it's .ipynb or .py
 
-class NotebookParser:
+class FileParser:
     """Parses Jupyter notebooks and extracts relevant content."""
     
     @staticmethod
@@ -90,6 +91,37 @@ class NotebookParser:
                 markdown_cells.append(content)
         
         return code_cells, markdown_cells
+    
+    @staticmethod
+    def parse_python_file(py_path: str) -> Tuple[List[str], List[str]]:
+        """Parse Python file and extract code and docstrings."""
+        with open(py_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Extract docstrings as markdown cells
+        markdown_cells = []
+        # Find module-level docstrings
+        docstring_pattern = r'^"""([\s\S]*?)"""'
+        docstrings = re.findall(docstring_pattern, content, re.MULTILINE)
+        markdown_cells.extend(docstrings)
+        
+        # Treat the entire file content as one code cell
+        code_cells = [content]
+        
+        return code_cells, markdown_cells
+    
+    @staticmethod
+    def parse_file(file_path: str) -> Tuple[List[str], List[str], str]:
+        """Parse a file based on its extension."""
+        path = Path(file_path)
+        if path.suffix == '.ipynb':
+            code_cells, markdown_cells = FileParser.parse_notebook(file_path)
+            return code_cells, markdown_cells, 'notebook'
+        elif path.suffix == '.py':
+            code_cells, markdown_cells = FileParser.parse_python_file(file_path)
+            return code_cells, markdown_cells, 'python'
+        else:
+            raise ValueError(f"Unsupported file type: {path.suffix}")
 
 class CodeAnalyzer:
     """Analyzes code for similarity detection."""
@@ -219,26 +251,68 @@ class SimilarityDetector:
         
         return max_length
 
-def process_submission(notebook_path: Path, folder_path: Path, include_txt: bool = True) -> StudentSubmission:
+def process_submission(file_path: Path, folder_path: Path, include_txt: bool = True) -> StudentSubmission:
     """Process a single submission - used for parallel processing."""
     student_info = {'student_id': 'unknown', 'student_name': 'Unknown', 'submission_time': ''}
     
     if include_txt:
-        # Find corresponding txt file
-        txt_filename = notebook_path.name.replace(".ipynb", ".txt").split("_CA")[0] + ".txt"
-        txt_files = list(folder_path.glob(f"{txt_filename.split('.txt')[0]}*.txt"))
+        # Try to find corresponding txt file for both notebooks and Python files
+        base_name = file_path.stem
+        txt_files = []
+        
+        # Strategy 1: Look for exact match with .txt extension
+        txt_pattern = f"{base_name}.txt"
+        txt_files = list(folder_path.glob(txt_pattern))
+        
+        # Strategy 2: Extract the student ID pattern and attempt date
+        # Pattern: CA3.1 - Dropbox_STUDENTID_attempt_DATE_*
+        if not txt_files:
+            import re
+            # Match pattern like: _x123y456_attempt_2025-09-07-18-27-28_
+            pattern = r'(.+_[a-z]\d{3}[a-z]\d{3}_attempt_\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})'
+            match = re.match(pattern, base_name)
+            if match:
+                txt_pattern = f"{match.group(1)}*.txt"
+                txt_files = list(folder_path.glob(txt_pattern))
+        
+        # Strategy 3: Remove everything after the attempt timestamp
+        if not txt_files and 'attempt_' in base_name:
+            # Split on 'attempt_' and reconstruct up to the timestamp
+            parts = base_name.split('attempt_')
+            if len(parts) >= 2:
+                # Get the timestamp part (2025-09-07-18-27-28)
+                timestamp_and_rest = parts[1]
+                # Extract just the timestamp (first 19 characters: 2025-09-07-18-27-28)
+                timestamp_match = re.match(r'(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})', timestamp_and_rest)
+                if timestamp_match:
+                    txt_pattern = f"{parts[0]}attempt_{timestamp_match.group(1)}.txt"
+                    txt_files = list(folder_path.glob(txt_pattern))
+        
+        # Strategy 4: For files with _CA or other suffix at the end, remove it
+        if not txt_files and '_CA' in base_name:
+            txt_pattern = base_name.split('_CA')[0]
+            txt_files = list(folder_path.glob(f"{txt_pattern}*.txt"))
+        
+        # Strategy 5: Try removing the last segment after underscore
+        if not txt_files and '_' in base_name:
+            parts = base_name.rsplit('_', 1)
+            if len(parts) > 1:
+                txt_pattern = parts[0]
+                txt_files = list(folder_path.glob(f"{txt_pattern}*.txt"))
         
         if txt_files:
+            # Use the first matching txt file
             txt_path = txt_files[0]
-            student_info = NotebookParser.parse_txt_file(str(txt_path))
-    else:
-        # Extract student info from filename if no txt file
-        filename = notebook_path.stem
+            student_info = FileParser.parse_txt_file(str(txt_path))
+    
+    if student_info['student_id'] == 'unknown':
+        # Extract student info from filename if no txt file found
+        filename = file_path.stem
         student_info['student_name'] = filename
         student_info['student_id'] = filename.lower().replace(' ', '_')
     
-    # Parse notebook
-    code_cells, markdown_cells = NotebookParser.parse_notebook(str(notebook_path))
+    # Parse file based on type
+    code_cells, markdown_cells, file_type = FileParser.parse_file(str(file_path))
     
     # Combine all code
     all_code = '\n'.join(code_cells)
@@ -252,7 +326,7 @@ def process_submission(notebook_path: Path, folder_path: Path, include_txt: bool
     return StudentSubmission(
         student_id=student_info.get('student_id', 'unknown'),
         student_name=student_info.get('student_name', 'Unknown'),
-        notebook_path=str(notebook_path),
+        file_path=str(file_path),
         submission_time=student_info.get('submission_time', ''),
         code_cells=code_cells,
         markdown_cells=markdown_cells,
@@ -261,7 +335,8 @@ def process_submission(notebook_path: Path, folder_path: Path, include_txt: bool
         ast_structure=ast_structure,
         variable_names=variables,
         function_names=functions,
-        import_statements=imports
+        import_statements=imports,
+        file_type=file_type
     )
 
 def compare_submissions(pair: Tuple[StudentSubmission, StudentSubmission], 
@@ -298,14 +373,15 @@ def compare_submissions(pair: Tuple[StudentSubmission, StudentSubmission],
     }
 
 class NotebookSimilarityDetector:
-    """Main analyzer for detecting similar notebook submissions."""
+    """Main analyzer for detecting similar code submissions (notebooks and Python files)."""
     
-    def __init__(self, folder_path: str, num_workers: int = None, include_txt_files: bool = True):
+    def __init__(self, folder_path: str, num_workers: int = None, include_txt_files: bool = True, file_types: List[str] = None):
         self.folder_path = Path(folder_path)
         self.submissions = []
         self.similarity_results = []
         self.num_workers = num_workers or mp.cpu_count()
         self.include_txt_files = include_txt_files
+        self.file_types = file_types or ['.ipynb', '.py']  # Support both by default
         
     def load_submissions(self, verbose: bool = True):
         """Load all submissions from the folder using parallel processing."""
@@ -313,19 +389,25 @@ class NotebookSimilarityDetector:
         if verbose:
             print(f"Loading submissions using {self.num_workers} workers...")
         
-        # Find all notebook files
-        notebook_files = list(self.folder_path.glob("*.ipynb"))
+        # Find all files based on specified types
+        all_files = []
+        for file_type in self.file_types:
+            pattern = f"*{file_type}"
+            files = list(self.folder_path.glob(pattern))
+            all_files.extend(files)
+            if verbose and files:
+                print(f"  Found {len(files)} {file_type} files")
         
-        if not notebook_files:
-            print(f"No .ipynb files found in {self.folder_path}")
+        if not all_files:
+            print(f"No files found with extensions {self.file_types} in {self.folder_path}")
             return
         
-        # Process notebooks in parallel
+        # Process files in parallel
         with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
             # Submit all tasks
             futures = []
-            for notebook_path in notebook_files:
-                future = executor.submit(process_submission, notebook_path, 
+            for file_path in all_files:
+                future = executor.submit(process_submission, file_path, 
                                        self.folder_path, self.include_txt_files)
                 futures.append(future)
             
@@ -507,6 +589,7 @@ class NotebookSimilarityDetector:
                 <tr>
                     <th>Student Name</th>
                     <th>Student ID</th>
+                    <th>File Type</th>
                     <th>Submission Time</th>
                     <th>Status</th>
                     <th>Similar To</th>
@@ -519,6 +602,7 @@ class NotebookSimilarityDetector:
             students_info[submission.student_id] = {
                 'name': submission.student_name,
                 'id': submission.student_id,
+                'file_type': submission.file_type,
                 'time': submission.submission_time,
                 'is_problematic': submission.student_id in problematic_students,
                 'similar_to': []
@@ -587,6 +671,7 @@ class NotebookSimilarityDetector:
                 <tr {row_class}>
                     <td>{info['name']}</td>
                     <td>{info['id']}</td>
+                    <td>{info.get('file_type', 'unknown')}</td>
                     <td>{info['time'] if info['time'] else 'Unknown'}</td>
                     <td>{status}</td>
                     <td>{similar_to_str}</td>
