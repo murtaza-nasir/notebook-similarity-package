@@ -2,7 +2,11 @@
 
 A powerful Python tool for detecting similar or identical submissions in Jupyter notebooks. Perfect for educators and TAs who need to check for potential plagiarism in programming assignments.
 
-📊 **[View Example Report](example_report.html)** - See what the output looks like with anonymized data
+## Example Report
+
+<img src="example_report.png" alt="Example Similarity Report" width="600">
+
+*Sample output showing similarity detection between multiple notebook submissions*
 
 ## Blackboard LMS Integration
 
