@@ -7,6 +7,7 @@ This script can be run directly without installing the package.
 import sys
 import os
 from pathlib import Path
+import argparse
 
 # Add the package to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -16,18 +17,31 @@ from notebook_similarity.analyzer import quick_check
 
 def main():
     """Main function for standalone execution."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Notebook Similarity Detector')
+    parser.add_argument('path', nargs='?', help='Path to directory or notebook file to analyze')
+    parser.add_argument('second_file', nargs='?', help='Second notebook for comparison (optional)')
+    parser.add_argument('--threshold', '-t', type=float, default=None, 
+                       help='Similarity threshold (0.5-1.0, default: 0.7)')
+    parser.add_argument('--no-interactive', action='store_true',
+                       help='Run non-interactively with defaults')
+    
+    args = parser.parse_args()
+    
     print("=" * 60)
     print("NOTEBOOK SIMILARITY DETECTOR")
     print("=" * 60)
     
-    if len(sys.argv) > 1:
-        # Use command line argument
-        target_path = sys.argv[1]
-    else:
+    # Get target path
+    if args.path:
+        target_path = args.path
+    elif not args.no_interactive:
         # Ask user for path
         target_path = input("\nEnter path to analyze (or press Enter for current directory): ").strip()
         if not target_path:
             target_path = "."
+    else:
+        target_path = "."
     
     # Check if path exists
     path = Path(target_path)
@@ -37,8 +51,8 @@ def main():
     
     # Check if it's a comparison of two files
     if path.is_file() and path.suffix == '.ipynb':
-        if len(sys.argv) > 2:
-            second_file = sys.argv[2]
+        if args.second_file:
+            second_file = args.second_file
             if Path(second_file).exists():
                 print(f"\nComparing two notebooks:")
                 print(f"  • {path.name}")
@@ -55,15 +69,24 @@ def main():
         # Analyze directory
         print(f"\nAnalyzing directory: {path.absolute()}")
         
-        # Ask for threshold
-        threshold_input = input("Enter similarity threshold (0.5-1.0, default 0.7): ").strip()
-        try:
-            threshold = float(threshold_input) if threshold_input else 0.7
+        # Get threshold
+        if args.threshold is not None:
+            threshold = args.threshold
             if not 0.5 <= threshold <= 1.0:
+                print(f"Invalid threshold {threshold}. Using default 0.7")
+                threshold = 0.7
+        elif not args.no_interactive:
+            # Ask for threshold
+            threshold_input = input("Enter similarity threshold (0.5-1.0, default 0.7): ").strip()
+            try:
+                threshold = float(threshold_input) if threshold_input else 0.7
+                if not 0.5 <= threshold <= 1.0:
+                    print("Invalid threshold. Using default 0.7")
+                    threshold = 0.7
+            except ValueError:
                 print("Invalid threshold. Using default 0.7")
                 threshold = 0.7
-        except ValueError:
-            print("Invalid threshold. Using default 0.7")
+        else:
             threshold = 0.7
         
         print(f"\nUsing similarity threshold: {threshold:.0%}")

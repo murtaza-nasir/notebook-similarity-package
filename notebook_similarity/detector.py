@@ -68,8 +68,19 @@ class FileParser:
     @staticmethod
     def parse_notebook(notebook_path: str) -> Tuple[List[str], List[str]]:
         """Parse notebook and extract code and markdown cells."""
-        with open(notebook_path, 'r', encoding='utf-8') as f:
-            notebook = json.load(f)
+        try:
+            with open(notebook_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if not content:
+                    print(f"  Warning: Empty notebook file: {Path(notebook_path).name}")
+                    return [], []
+                notebook = json.loads(content)
+        except json.JSONDecodeError as e:
+            print(f"  Warning: Invalid JSON in notebook {Path(notebook_path).name}: {str(e)}")
+            return [], []
+        except Exception as e:
+            print(f"  Warning: Error reading notebook {Path(notebook_path).name}: {str(e)}")
+            return [], []
         
         code_cells = []
         markdown_cells = []
@@ -313,6 +324,10 @@ def process_submission(file_path: Path, folder_path: Path, include_txt: bool = T
     
     # Parse file based on type
     code_cells, markdown_cells, file_type = FileParser.parse_file(str(file_path))
+    
+    # Skip files with no content
+    if not code_cells and not markdown_cells:
+        return None
     
     # Combine all code
     all_code = '\n'.join(code_cells)

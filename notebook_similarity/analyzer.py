@@ -64,9 +64,9 @@ def analyze_directory(
     clusters = detector.find_clusters(verbose=verbose)
     
     if verbose:
-        print(f"\n✓ Analysis complete!")
-        print(f"  • Report: {report_path}")
-        print(f"  • CSV: {str(report_path).replace('.html', '.csv')}")
+        print(f"\n[OK] Analysis complete!")
+        print(f"  - Report: {report_path}")
+        print(f"  - CSV: {str(report_path).replace('.html', '.csv')}")
     
     return detector, df, clusters
 
